@@ -1,0 +1,3 @@
+# Full runtime = core + TensorFlow backend (recommended on the Pi 5).
+-r requirements.txt
+tensorflow>=2.16,<2.21

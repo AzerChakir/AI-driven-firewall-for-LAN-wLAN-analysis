@@ -1,0 +1,18 @@
+{
+    "project": "AI-Driven Network Intrusion Detection Firewall",
+    "model_type": "TensorFlow/Keras binary classification MLP",
+    "input_features": 30,
+    "input_shape": [
+        null,
+        30
+    ],
+    "output": {
+        "0": "BENIGN",
+        "1": "ATTACK"
+    },
+    "classification_threshold": 0.5,
+    "training_epochs_completed": 30,
+    "created_utc": "2026-10-18T13:57:48.959861+00:00",
+    "preprocessing_artifact": "preprocessing.pkl",
+    "model_artifact": "ids_model.keras"
+}

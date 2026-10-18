@@ -1,0 +1,66 @@
+# AI-Driven Firewall - Raspberry Pi 5 configuration
+
+capture:
+  # "auto" or a concrete interface, e.g. "end0", "wlan0", "eth0".
+  # For a gateway Pi this should be the LAN-side interface (the one facing
+  # the devices you want to protect).
+  interface: auto
+  # BPF filter: only IPv4 TCP/UDP is analysed (the model was trained on IPv4).
+  bpf_filter: "ip and (tcp or udp)"
+  # Snaplen: only headers + a slice of payload are needed.
+  snaplen: 256
+  # How many packets may wait in the processing queue before being dropped.
+  queue_size: 200000
+  # Promiscuous mode (needed when the Pi is a passive sensor / mirror port).
+  promiscuous: true
+
+model:
+  # Directory holding ids_model.keras, preprocessing.pkl and metadata.json
+  dir: model_save
+  # null -> use classification_threshold from metadata.json (0.5)
+  threshold: null
+  # Flows scored per inference batch.
+  batch_size: 64
+  # Seconds between forced batch flushes.
+  batch_interval_s: 1.0
+
+flows:
+  # CICFlowMeter flow lifetime (seconds -> 120 in the Java tool)
+  timeout_s: 120
+  # Live-capture addition: emit a flow after this many seconds without packets.
+  idle_timeout_s: 120
+
+firewall:
+  # monitor -> detect only, no nftables changes
+  # manual  -> dashboard can block/unblock, nothing automatic
+  # auto    -> manual + automatic blocking of repeat offenders
+  mode: manual
+  # Auto-block an initiator after this many ATTACK flows inside the window.
+  auto_block_threshold: 5
+  auto_block_window_s: 60
+  # Automatic blocks expire after this many seconds (manual ones do not).
+  auto_block_ttl_s: 600
+  # nftables table/set name used for the blocklist.
+  nft_table: idsfw
+  # Never block these addresses (dashboard/management networks).
+  allowlist:
+    - 224.0.0.0/4
+    - 127.0.0.0/8
+
+web:
+  host: 0.0.0.0
+  port: 80
+  # "auto" -> advertise the first private IPv4 of the LAN interface
+  advertise_ip: auto
+  # Refresh interval used by the dashboard (milliseconds).
+  refresh_ms: 2000
+
+store:
+  path: data/idsfw.db
+  max_flows: 5000
+  max_alerts: 2000
+
+logging:
+  level: INFO
+  # Optional file; null logs to stdout (journalctl when run as a service)
+  file: null

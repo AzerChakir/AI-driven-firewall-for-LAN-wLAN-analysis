@@ -1,0 +1,24 @@
+[Unit]
+Description=AI-driven IDS firewall and network analyser
+Documentation=file:__APP_DIR__/README.md
+After=network-online.target nftables.service
+Wants=network-online.target nftables.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/venv/bin/python __APP_DIR__/run.py --config __APP_DIR__/config.yaml
+Restart=always
+RestartSec=5
+# raw packet capture + nftables manipulation + privileged port 80
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+# keep the service alive but restart cleanly on failures
+TimeoutStopSec=15
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=idsfw
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+# Core runtime dependencies (Raspberry Pi OS / Debian 12, Python 3.11)
+
+numpy>=1.26,<3
+# IMPORTANT: keep this pinned to the scikit-learn version that produced
+# model_save/preprocessing.pkl (it was written with 1.6.1).
+scikit-learn==1.6.1
+joblib>=1.3
+scapy>=2.5
+Flask>=3.0
+PyYAML>=6.0

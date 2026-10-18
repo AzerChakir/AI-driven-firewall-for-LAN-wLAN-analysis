@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Firewall · Network Analysis</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <meta name="idsfw-refresh-ms" content="{{ refresh_ms }}" />
+  <meta name="idsfw-version" content="{{ version }}" />
+  <meta name="idsfw-port" content="{{ port }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <h1>AI Firewall</h1>
+        <p class="subtitle">Network intrusion detection &amp; analysis · v{{ version }}</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="chip" id="chip-status"><span class="dot" id="status-dot"></span><span id="status-text">connecting…</span></div>
+      <div class="chip" id="chip-iface">iface: –</div>
+      <div class="chip" id="chip-model">model: –</div>
+      <div class="chip" id="chip-uptime">up: –</div>
+    </div>
+  </header>
+
+  <section class="banner" id="alert-banner">
+    <div>
+      <strong>Dashboard</strong>
+      <span id="banner-ips">resolving address…</span>
+    </div>
+    <div class="mode-switch" role="group" aria-label="Firewall mode">
+      <button data-mode="monitor" title="Detect only, never touch nftables">Monitor</button>
+      <button data-mode="manual" title="You block from the dashboard">Manual</button>
+      <button data-mode="auto" title="Repeat offenders are blocked automatically">Auto</button>
+    </div>
+  </section>
+
+  <main>
+    <section class="kpis">
+      <article class="kpi"><h3>Flows</h3><p id="kpi-flows">0</p><small id="kpi-flows-sub">–</small></article>
+      <article class="kpi danger"><h3>Attacks</h3><p id="kpi-attacks">0</p><small id="kpi-attacks-sub">–</small></article>
+      <article class="kpi"><h3>Blocked IPs</h3><p id="kpi-blocked">0</p><small id="kpi-blocked-sub">–</small></article>
+      <article class="kpi"><h3>Packets / s</h3><p id="kpi-pps">0</p><small id="kpi-pps-sub">–</small></article>
+      <article class="kpi"><h3>Throughput</h3><p id="kpi-bps">0 B/s</p><small id="kpi-bps-sub">–</small></article>
+      <article class="kpi"><h3>Active flows</h3><p id="kpi-active">0</p><small id="kpi-active-sub">–</small></article>
+    </section>
+
+    <section class="charts">
+      <article class="panel">
+        <header><h2>Traffic (bytes/s)</h2><span class="muted" id="chart-traffic-peak"></span></header>
+        <canvas id="chart-traffic" height="180"></canvas>
+      </article>
+      <article class="panel">
+        <header><h2>Flows &amp; attacks (per second)</h2><span class="muted" id="chart-flows-peak"></span></header>
+        <canvas id="chart-flows" height="180"></canvas>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="panel">
+        <header>
+          <h2>Detections</h2>
+          <span class="muted" id="alerts-count"></span>
+        </header>
+        <div class="table-wrap">
+          <table id="table-alerts">
+            <thead><tr><th>Time</th><th>Source</th><th>Target</th><th>Service</th><th>Score</th><th>Action</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="panel">
+        <header><h2>Blocked addresses</h2><span class="muted" id="blocks-count"></span></header>
+        <div class="table-wrap">
+          <table id="table-blocks">
+            <thead><tr><th>Address</th><th>Source</th><th>Expires</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <header><h2>Recent flows</h2><span class="muted" id="flows-count"></span></header>
+      <div class="table-wrap">
+        <table id="table-flows">
+          <thead><tr><th>Time</th><th>Source</th><th>Target</th><th>Service</th><th>Duration</th><th>Fwd/Bwd pkts</th><th>Bytes</th><th>Score</th><th>Verdict</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="charts">
+      <article class="panel">
+        <header><h2>Top talkers (5 min)</h2></header>
+        <div class="bar-list" id="top-talkers"></div>
+      </article>
+      <article class="panel">
+        <header><h2>Top attackers (5 min)</h2></header>
+        <div class="bar-list" id="top-attackers"></div>
+      </article>
+      <article class="panel">
+        <header><h2>Destination ports (5 min)</h2></header>
+        <div class="bar-list" id="top-ports"></div>
+      </article>
+      <article class="panel">
+        <header><h2>Model &amp; system</h2></header>
+        <dl class="kv" id="system-info"></dl>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Capture: <code id="footer-iface">–</code></span>
+    <span>Firewall: <code id="footer-fw">–</code></span>
+    <span id="footer-refresh">updated –</span>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
