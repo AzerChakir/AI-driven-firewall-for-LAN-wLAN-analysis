@@ -5,6 +5,15 @@ flows, scores them with the trained model in `model_save/`, stores results in
 SQLite, and serves a network dashboard. In `auto` mode, repeated detections
 can be blocked with nftables.
 
+For the complete gateway setup, interface layout, Pi-hole coexistence,
+forwarding/NAT, client routing, testing, and rollback procedure, see
+[RASPBERRY_PI_GATEWAY_GUIDE.md](./RASPBERRY_PI_GATEWAY_GUIDE.md).
+
+> **Separate project:** Pi-hole is not part of this project. This firewall
+> does not modify Pi-hole's source code, configuration, database, DNS, DHCP,
+> or web server. Pi-hole is mentioned only because both applications may run
+> on the same Raspberry Pi.
+
 ## Requirements
 
 - Raspberry Pi 5 running 64-bit Raspberry Pi OS (Bookworm) or Debian 12
@@ -58,9 +67,10 @@ sudo systemctl status idsfw
 journalctl -u idsfw -f
 ```
 
-Open TCP port 80 on the Pi/LAN firewall if another firewall is enabled.
-Change `web.port` in `config.yaml` (for example to `8080`) before rerunning
-the installer if port 80 is already in use.
+Open the configured dashboard port on the Pi/LAN firewall if another firewall
+is enabled. If another independent application already uses port 80, change
+`web.port` in `config.yaml` to an unused port such as `8080`. This project
+does not change the other application's configuration.
 
 ## Configuration and operation
 
