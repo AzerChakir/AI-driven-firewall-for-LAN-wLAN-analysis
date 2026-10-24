@@ -98,7 +98,12 @@ def make_queue_callback(
 
 
 class LiveCapture:
-    """Wraps scapy's AsyncSniffer so it can be started/stopped deterministically."""
+    """Live packet capture using a dedicated daemon thread with scapy sniff().
+
+    Uses a plain threading.Thread (not AsyncSniffer) so that the sniffer is
+    fully running before Flask's app.run() blocks the main thread.  A
+    threading.Event is used to stop the loop cleanly.
+    """
 
     def __init__(
         self,
@@ -113,9 +118,12 @@ class LiveCapture:
         self.snaplen = snaplen
         self.promiscuous = promiscuous
         self.callback = callback
-        self._sniffer = None
+        self._stop_event = __import__("threading").Event()
+        self._thread: object | None = None
 
     def start(self) -> None:
+        import threading
+
         log.info(
             "starting live capture on %s (filter=%r, snaplen=%s, promisc=%s)",
             self.interface,
@@ -123,37 +131,118 @@ class LiveCapture:
             self.snaplen,
             self.promiscuous,
         )
-        self._sniffer = scapy_all().AsyncSniffer(
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="idsfw-sniffer",
+            daemon=True,
+        )
+        self._thread.start()
+        # Give the sniffer thread a moment to open the socket before returning.
+        import time
+        time.sleep(0.5)
+        log.info("live capture thread started (tid=%s)", self._thread.ident)
+
+    def _run(self) -> None:
+        """Blocking sniff loop; exits when stop() sets the stop event.
+
+        Opens a raw L2listen socket explicitly (so we can set promisc/snaplen),
+        then passes it to scapy.sniff() via opened_socket.  stop_filter is
+        polled after every packet so the loop exits cleanly when stop() is called.
+        """
+        import ctypes
+        import socket as _socket
+
+        scapy = scapy_all()
+        stop_event = self._stop_event
+
+        # Build the socket with correct promisc + snaplen settings.
+        conf = scapy.conf
+        sock = conf.L2listen(
             iface=self.interface,
             filter=self.bpf_filter or None,
-            prn=self.callback,
-            store=False,
-            promisc=self.promiscuous,
-            snaplen=self.snaplen,
         )
-        self._sniffer.start()
+
+        # Enable promiscuous mode via SIOCGIFFLAGS / SIOCSIFFLAGS if requested.
+        if self.promiscuous:
+            try:
+                import struct
+                import fcntl
+                SIOCGIFFLAGS = 0x8913
+                SIOCSIFFLAGS = 0x8914
+                IFF_PROMISC = 0x100
+                ifreq = struct.pack("16sh", self.interface.encode(), 0)
+                fd = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+                try:
+                    res = fcntl.ioctl(fd.fileno(), SIOCGIFFLAGS, ifreq)
+                    flags = struct.unpack("16sh", res)[1]
+                    flags |= IFF_PROMISC
+                    fcntl.ioctl(fd.fileno(), SIOCSIFFLAGS,
+                                struct.pack("16sh", self.interface.encode(), flags))
+                finally:
+                    fd.close()
+            except Exception as exc:
+                log.debug("promisc ioctl failed (non-fatal): %s", exc)
+
+        def stop_filter(_pkt) -> bool:
+            return stop_event.is_set()
+
+        try:
+            scapy.sniff(
+                opened_socket=sock,
+                prn=self.callback,
+                store=False,
+                stop_filter=stop_filter,
+            )
+        except Exception as exc:
+            log.error("sniffer thread crashed: %s", exc)
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
 
     def stop(self) -> None:
-        if self._sniffer is not None:
+        self._stop_event.set()
+        if self._thread is not None:
             try:
-                self._sniffer.stop()
-            except Exception as exc:  # pragma: no cover
-                log.debug("sniffer stop failed: %s", exc)
-            self._sniffer = None
+                self._thread.join(timeout=3)
+            except Exception:
+                pass
+            self._thread = None
 
 
 def replay_pcap(
     path: str | Path,
     callback: Callable[[object], None],
     limit: int | None = None,
+    realtime: bool = False,
+    speed: float = 1.0,
 ) -> int:
-    """Feeds a capture file through ``callback`` (used for offline validation)."""
+    """Feeds a capture file through ``callback`` (used for offline validation or real-time demo)."""
+    import time
+
     scapy = scapy_all()
     count = 0
     path = Path(path)
-    log.info("replaying %s", path)
+    log.info("replaying %s (realtime=%s, speed=%sx)", path, realtime, speed)
+    first_pkt_ts = None
+    wall_start = time.time()
+
     with scapy.PcapReader(str(path)) as reader:
         for pkt in reader:
+            if realtime:
+                orig_ts = float(pkt.time)
+                if first_pkt_ts is None:
+                    first_pkt_ts = orig_ts
+                    wall_start = time.time()
+                rel_offset = (orig_ts - first_pkt_ts) / max(0.001, speed)
+                target_wall = wall_start + rel_offset
+                sleep_dur = target_wall - time.time()
+                if 0.001 < sleep_dur < 10.0:
+                    time.sleep(sleep_dur)
+                pkt.time = time.time()
+
             callback(pkt)
             count += 1
             if limit and count >= limit:

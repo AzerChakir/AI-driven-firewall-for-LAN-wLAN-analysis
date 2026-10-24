@@ -1,66 +1,71 @@
-# AI-Driven Firewall - Raspberry Pi 5 configuration
-
 capture:
-  # "auto" or a concrete interface, e.g. "end0", "wlan0", "eth0".
-  # For a gateway Pi this should be the LAN-side interface (the one facing
-  # the devices you want to protect).
-  interface: auto
-  # BPF filter: only IPv4 TCP/UDP is analysed (the model was trained on IPv4).
-  bpf_filter: "ip and (tcp or udp)"
-  # Snaplen: only headers + a slice of payload are needed.
+  interface: ap0          # hotspot AP interface — sees all client traffic
+  bpf_filter: ip and (tcp or udp)
   snaplen: 256
-  # How many packets may wait in the processing queue before being dropped.
   queue_size: 200000
-  # Promiscuous mode (needed when the Pi is a passive sensor / mirror port).
   promiscuous: true
-
 model:
-  # Directory holding ids_model.keras, preprocessing.pkl and metadata.json
   dir: model_save
-  # null -> use classification_threshold from metadata.json (0.5)
-  threshold: null
-  # Flows scored per inference batch.
+  threshold: 0.70        # raised from 0.5 to reduce CDN false-positives
   batch_size: 64
-  # Seconds between forced batch flushes.
-  batch_interval_s: 1.0
-
+  batch_interval_s: 0.5
 flows:
-  # CICFlowMeter flow lifetime (seconds -> 120 in the Java tool)
   timeout_s: 120
-  # Live-capture addition: emit a flow after this many seconds without packets.
-  idle_timeout_s: 120
-
+  idle_timeout_s: 5
+  active_timeout_s: 10
+  min_packets: 1
 firewall:
-  # monitor -> detect only, no nftables changes
-  # manual  -> dashboard can block/unblock, nothing automatic
-  # auto    -> manual + automatic blocking of repeat offenders
   mode: manual
-  # Auto-block an initiator after this many ATTACK flows inside the window.
   auto_block_threshold: 5
   auto_block_window_s: 60
-  # Automatic blocks expire after this many seconds (manual ones do not).
   auto_block_ttl_s: 600
-  # nftables table/set name used for the blocklist.
   nft_table: idsfw
-  # Never block these addresses (dashboard/management networks).
   allowlist:
-    - 224.0.0.0/4
-    - 127.0.0.0/8
-
+  # --- local / special-use ranges (RFC 1918, multicast, loopback) ---
+  - 224.0.0.0/4        # multicast
+  - 127.0.0.0/8        # loopback
+  - 10.0.0.0/8         # RFC 1918
+  - 172.16.0.0/12      # RFC 1918  (covers 172.16–172.31, incl. Pi hotspot)
+  - 192.168.0.0/16     # RFC 1918
+  # --- Google (Search, YouTube, APIs, GCP) ---
+  - 172.217.0.0/16
+  - 172.253.0.0/16
+  - 142.250.0.0/15
+  - 142.251.0.0/16
+  - 216.58.192.0/19
+  - 34.64.0.0/10       # Google Cloud APAC / global
+  - 34.128.0.0/10      # Google Cloud
+  # --- Microsoft (Azure, Office 365, Windows Update) ---
+  - 20.0.0.0/8
+  - 40.64.0.0/10
+  - 52.64.0.0/11
+  - 13.64.0.0/11
+  # --- GitHub ---
+  - 140.82.112.0/20
+  - 185.199.108.0/22
+  # --- Cloudflare (CDN + 1.1.1.1 DNS) ---
+  - 1.1.1.0/24
+  - 1.0.0.0/24
+  - 104.16.0.0/13
+  - 104.24.0.0/14
+  - 162.158.0.0/15
+  - 188.114.96.0/20
+  - 197.234.240.0/22
+  # --- Amazon AWS (CloudFront, S3, etc.) ---
+  - 52.84.0.0/15
+  - 13.32.0.0/15
+  - 99.84.0.0/16
+  # --- Apple (iCloud, updates) ---
+  - 17.0.0.0/8
 web:
   host: 0.0.0.0
-  port: 80
-  # "auto" -> advertise the first private IPv4 of the LAN interface
-  advertise_ip: auto
-  # Refresh interval used by the dashboard (milliseconds).
-  refresh_ms: 2000
-
+  port: 8080
+  advertise_ip: 192.168.50.1    # Pi's hotspot IP — reachable by all connected clients
+  refresh_ms: 1000
 store:
   path: data/idsfw.db
   max_flows: 5000
   max_alerts: 2000
-
 logging:
   level: INFO
-  # Optional file; null logs to stdout (journalctl when run as a service)
   file: null
