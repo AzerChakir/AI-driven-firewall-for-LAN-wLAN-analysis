@@ -113,11 +113,18 @@ def detect_advertise_ip(preferred: str | None = None) -> str | None:
 
 
 def detect_capture_interface(configured: str | None = None) -> str | None:
-    """Resolves ``capture.interface`` == ``auto`` to a concrete device name."""
-    if configured and configured != "auto":
-        return configured
-
+    """Resolves ``capture.interface`` to a valid, active network interface."""
     states = link_states()
+
+    if configured and configured != "auto":
+        if configured in states:
+            return configured
+        log.warning(
+            "configured capture interface '%s' not found on system (available: %s); falling back to auto-detection",
+            configured,
+            list(states.keys()),
+        )
+
     wan_iface = (default_route() or {}).get("dev")
     private = [a for a in ipv4_addresses() if a["private"]]
     lan_candidates = [a["iface"] for a in private if a["iface"] != wan_iface]
@@ -127,13 +134,20 @@ def detect_capture_interface(configured: str | None = None) -> str | None:
             return candidate
     if lan_candidates:
         return lan_candidates[0]
-    if wan_iface:
+    if wan_iface and states.get(wan_iface) == "up":
         return wan_iface
 
     for name, state in states.items():
         if name != "lo" and state == "up":
             return name
-    return None
+
+    for name in states:
+        if name != "lo":
+            return name
+
+    if "lo" in states:
+        return "lo"
+    return configured or None
 
 
 def dashboard_urls(ip: str | None, port: int) -> list[str]:

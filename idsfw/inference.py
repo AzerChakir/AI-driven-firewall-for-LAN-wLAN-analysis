@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -233,12 +234,22 @@ class Predictor:
         installed scikit-learn is much newer, calling ``transform`` can fail
         (private attributes are renamed between releases).  In that case the
         learned statistics are applied directly - the results are identical.
+
+        sklearn >= 1.2 warns when a transformer fitted with a DataFrame
+        receives a plain ndarray.  We suppress that specific warning because
+        we intentionally pass raw arrays to avoid a pandas dependency.
         """
         try:
-            if self.artifacts.imputer is not None:
-                matrix = self.artifacts.imputer.transform(matrix)
-            if self.artifacts.scaler is not None:
-                matrix = self.artifacts.scaler.transform(matrix)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="X does not have valid feature names",
+                    category=UserWarning,
+                )
+                if self.artifacts.imputer is not None:
+                    matrix = self.artifacts.imputer.transform(matrix)
+                if self.artifacts.scaler is not None:
+                    matrix = self.artifacts.scaler.transform(matrix)
             return matrix
         except Exception as exc:  # pragma: no cover - depends on local sklearn
             log.warning(

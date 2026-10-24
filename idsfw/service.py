@@ -85,7 +85,11 @@ class IdsService:
         )
         self.flowmeter = FlowMeter(
             flow_timeout_us=int(float(cfg.get("flows.timeout_s", 120)) * 1_000_000),
-            idle_timeout_us=int(float(cfg.get("flows.idle_timeout_s", 120)) * 1_000_000),
+            idle_timeout_us=int(float(cfg.get("flows.idle_timeout_s", 5)) * 1_000_000),
+            active_timeout_us=int(float(cfg.get("flows.active_timeout_s", 10)) * 1_000_000)
+            if cfg.get("flows.active_timeout_s")
+            else None,
+            min_packets=int(cfg.get("flows.min_packets", 1)),
         )
         self.firewall = Firewall(
             table=cfg.get("firewall.nft_table", "idsfw"),
@@ -174,7 +178,9 @@ class IdsService:
         callback = capture_mod.make_queue_callback(
             self.packet_queue, on_drop=self.stats.record_drop, on_error=self.stats.record_parse_error
         )
-        capture_mod.replay_pcap(self.pcap_path, callback)
+        realtime = bool(self.cfg.get("capture.realtime_replay", False))
+        speed = float(self.cfg.get("capture.replay_speed", 1.0))
+        capture_mod.replay_pcap(self.pcap_path, callback, realtime=realtime, speed=speed)
         # drain the meter, then force-emit everything still open
         while not self._stop.is_set():
             if self.packet_queue.empty():
@@ -240,12 +246,58 @@ class IdsService:
                 return
             rows = pending
             pending = []
+            # Skip scoring for flows where both endpoints are allowlisted
+            # (e.g. local multicast/broadcast) or where the initiating IP
+            # is in the trusted CDN/cloud allowlist — these cannot be threats.
+            scoreable = [
+                r for r in rows
+                if not (
+                    self.firewall.is_allowlisted(r["src_ip"])
+                    and self.firewall.is_allowlisted(r["dst_ip"])
+                )
+            ]
+            skipped = len(rows) - len(scoreable)
+            if skipped:
+                log.debug("skipped scoring %d allowlisted flows", skipped)
+                # Record them as BENIGN in stats without hitting the model
+                for r in rows:
+                    if self.firewall.is_allowlisted(r["src_ip"]) and self.firewall.is_allowlisted(r["dst_ip"]):
+                        self.stats.record_flow("BENIGN", r["fwd_bytes"], r["bwd_bytes"], ts=r["ts"] or time.time())
+            if not scoreable:
+                self.store.insert_flows([
+                    {
+                        "ts": time.time(),
+                        "src_ip": r["src_ip"], "src_port": r["src_port"],
+                        "dst_ip": r["dst_ip"], "dst_port": r["dst_port"],
+                        "proto": r["proto"], "duration_us": r["duration_us"],
+                        "fwd_pkts": r["fwd_pkts"], "bwd_pkts": r["bwd_pkts"],
+                        "fwd_bytes": r["fwd_bytes"], "bwd_bytes": r["bwd_bytes"],
+                        "score": 0.0, "verdict": "BENIGN", "service": r["service"],
+                    }
+                    for r in rows
+                ])
+                return
             try:
-                predictions = self.predictor.predict_rows([r["features"] for r in rows])
+                predictions = self.predictor.predict_rows([r["features"] for r in scoreable])
             except Exception:
                 log.exception("inference failed")
                 return
-            self._commit(rows, predictions)
+            self._commit(scoreable, predictions)
+            # Store the skipped allowlisted rows as BENIGN flows (no alert)
+            if skipped:
+                self.store.insert_flows([
+                    {
+                        "ts": time.time(),
+                        "src_ip": r["src_ip"], "src_port": r["src_port"],
+                        "dst_ip": r["dst_ip"], "dst_port": r["dst_port"],
+                        "proto": r["proto"], "duration_us": r["duration_us"],
+                        "fwd_pkts": r["fwd_pkts"], "bwd_pkts": r["bwd_pkts"],
+                        "fwd_bytes": r["fwd_bytes"], "bwd_bytes": r["bwd_bytes"],
+                        "score": 0.0, "verdict": "BENIGN", "service": r["service"],
+                    }
+                    for r in rows
+                    if self.firewall.is_allowlisted(r["src_ip"]) and self.firewall.is_allowlisted(r["dst_ip"])
+                ])
 
         while not self._stop.is_set():
             try:
@@ -293,6 +345,18 @@ class IdsService:
 
     def _handle_attack(self, row: dict, prediction) -> None:
         initiator = row["src_ip"]
+        responder = row["dst_ip"]
+
+        # Suppress alerts for flows where either endpoint is a trusted CDN /
+        # cloud IP — these are almost certainly false positives caused by the
+        # CIC-IDS2017 model not having seen real HTTPS traffic to major CDNs.
+        if self.firewall.is_allowlisted(initiator) or self.firewall.is_allowlisted(responder):
+            log.debug(
+                "suppressed alert for allowlisted flow %s -> %s (score=%.3f)",
+                initiator, responder, prediction.score,
+            )
+            return
+
         action = "alert"
         reason = f"model score {prediction.score:.3f} >= {prediction.threshold:.2f}"
 

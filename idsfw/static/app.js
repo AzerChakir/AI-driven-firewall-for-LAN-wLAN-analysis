@@ -179,15 +179,81 @@ function drawChart(canvas, series, labels, { yFormat = fmtNum } = {}) {
 }
 
 /* -------------------------------------------------------------- rendering */
+function renderSparkline(svgId, values) {
+  const svg = document.getElementById(svgId);
+  if (!svg) return;
+  const path = svg.querySelector("path");
+  if (!path) return;
+  if (!values || !values.length) {
+    path.setAttribute("d", "M 1 31 L 119 31");
+    return;
+  }
+  const max = Math.max(1, ...values);
+  const min = 0;
+  const range = max - min || 1;
+  const width = 120;
+  const height = 32;
+  const padY = 4;
+  const stepX = (width - 2) / Math.max(1, values.length - 1);
+  const d = values.map((val, idx) => {
+    const x = 1 + idx * stepX;
+    const y = height - padY - ((val - min) / range) * (height - 2 * padY);
+    return `${idx === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(" ");
+  path.setAttribute("d", d);
+}
+
+function renderHealth(summary) {
+  const stats = summary.stats || {};
+  const model = summary.model || {};
+  const alerts = summary.alerts || {};
+  let score = 100;
+  let statusText = "● healthy";
+  let isErr = false;
+
+  if (model.backend === "mock") {
+    score -= 25;
+    statusText = "▲ mock model";
+  }
+  if (stats.dropped_packets > 0) {
+    score -= Math.min(20, Math.ceil(stats.dropped_packets / 10));
+  }
+  if (stats.parse_errors > 0) {
+    score -= Math.min(15, stats.parse_errors);
+  }
+  if ((alerts.window || 0) > 0) {
+    score = Math.max(30, score - Math.min(50, (alerts.window || 0) * 10));
+    statusText = `! ${alerts.window} threats active`;
+    isErr = true;
+  }
+  score = Math.max(10, Math.min(100, score));
+
+  const ringEl = document.getElementById("health-ring-val");
+  if (ringEl) {
+    const level = score >= 80 ? "protected" : (score >= 50 ? "warning" : "critical");
+    ringEl.innerHTML = `<strong>${score}%</strong><small>${level}</small>`;
+  }
+  const badgeEl = document.getElementById("health-status-check");
+  if (badgeEl) {
+    badgeEl.textContent = statusText;
+    badgeEl.style.color = isErr ? "var(--rose)" : (score < 80 ? "var(--amber)" : "var(--emerald)");
+  }
+}
+
 function renderSummary(summary) {
   const stats = summary.stats || {};
   const model = summary.model || {};
   const firewall = summary.firewall || {};
+  const flowsDb = summary.flows || {};
 
-  document.getElementById("kpi-flows").textContent = fmtNum(stats.flows_total);
+  const totalFlows = (stats.flows_total || 0) || ((flowsDb.BENIGN || 0) + (flowsDb.ATTACK || 0));
+  const totalAttacks = (stats.attacks_total || 0) || (flowsDb.ATTACK || 0);
+  const totalBenign = (stats.verdicts?.BENIGN || 0) || (flowsDb.BENIGN || 0);
+
+  document.getElementById("kpi-flows").textContent = fmtNum(totalFlows);
   document.getElementById("kpi-flows-sub").textContent =
-    `${fmtNum(stats.verdicts?.ATTACK || 0)} attacks · ${fmtNum(stats.verdicts?.BENIGN || 0)} benign`;
-  document.getElementById("kpi-attacks").textContent = fmtNum(stats.attacks_total);
+    `${fmtNum(totalAttacks)} attacks · ${fmtNum(totalBenign)} benign`;
+  document.getElementById("kpi-attacks").textContent = fmtNum(totalAttacks);
   document.getElementById("kpi-attacks-sub").textContent =
     `last 5 min: ${fmtNum(summary.alerts?.window || 0)}`;
   document.getElementById("kpi-blocked").textContent = fmtNum((firewall.blocked || []).length);
@@ -198,8 +264,12 @@ function renderSummary(summary) {
   document.getElementById("kpi-pps-sub").textContent = `${fmtNum(stats.packets_total)} total`;
   document.getElementById("kpi-bps").textContent = `${fmtBytes(stats.bytes_per_s)}/s`;
   document.getElementById("kpi-bps-sub").textContent = `${fmtBytes(stats.bytes_total)} total`;
-  document.getElementById("kpi-active").textContent = fmtNum(stats.active_flows);
-  document.getElementById("kpi-active-sub").textContent = `${fmtNum(stats.dropped_packets)} dropped`;
+  const kpiActive = document.getElementById("kpi-active");
+  if (kpiActive) kpiActive.textContent = fmtNum(stats.active_flows);
+  const kpiActiveSub = document.getElementById("kpi-active-sub");
+  if (kpiActiveSub) kpiActiveSub.textContent = `${fmtNum(stats.dropped_packets)} dropped`;
+
+  renderHealth(summary);
 
   document.getElementById("chip-iface").textContent = `iface: ${summary.interface?.capture_interface || "–"}`;
   document.getElementById("chip-model").textContent =
@@ -243,9 +313,13 @@ function renderSummary(summary) {
     .join("");
 
   document.getElementById("footer-iface").textContent = summary.interface?.capture_interface || "–";
-  document.getElementById("footer-fw").textContent = firewall.available
+  const fwStatus = firewall.available
     ? `${firewall.mode} · ${firewall.table}`
     : "unavailable (no nft)";
+  const footerFw = document.getElementById("footer-fw");
+  if (footerFw) footerFw.textContent = fwStatus;
+  const footerFwBottom = document.getElementById("footer-fw-bottom");
+  if (footerFwBottom) footerFwBottom.textContent = fwStatus;
 }
 
 function renderTimeseries(data) {
@@ -274,6 +348,11 @@ function renderTimeseries(data) {
   const peakAttacks = Math.max(0, ...(data.attacks || []));
   document.getElementById("chart-flows-peak").textContent =
     `peak ${peakFlows} flows/s · ${peakAttacks} attacks/s`;
+
+  renderSparkline("sparkline-pps", data.packets || []);
+  renderSparkline("sparkline-bps", data.bytes || []);
+  renderSparkline("sparkline-flows", data.flows || []);
+  renderSparkline("sparkline-attacks", data.attacks || []);
 }
 
 function blockButton(ip) {
@@ -309,6 +388,7 @@ function renderBlocks(data) {
   document.getElementById("blocks-count").textContent = data.available
     ? `${blocks.length} blocked`
     : "nftables unavailable";
+  renderSparkline("sparkline-blocked", blocks.map((_, i) => i + 1));
   if (!blocks.length) {
     body.innerHTML = `<tr><td colspan="4" class="muted">No addresses blocked.</td></tr>`;
     return;
@@ -367,6 +447,32 @@ function renderBars(containerId, rows, { label, value, danger = false, format = 
         <span class="value">${esc(format(amount))}</span>
       </div>`;
     })
+    .join("");
+}
+
+function renderClients(data) {
+  const body = document.querySelector("#table-clients tbody");
+  if (!body) return;
+  const clients = data.clients || [];
+  const countEl = document.getElementById("clients-count");
+  if (countEl) countEl.textContent = `(${clients.length} device${clients.length === 1 ? "" : "s"})`;
+  const apEl = document.getElementById("clients-ap");
+  if (apEl) apEl.textContent = `interface: ${data.ap_interface || "ap0"}`;
+
+  if (!clients.length) {
+    body.innerHTML = `<tr><td colspan="4" class="muted">No devices currently connected to hotspot.</td></tr>`;
+    return;
+  }
+  body.innerHTML = clients
+    .map(
+      (c) => `
+      <tr>
+        <td><strong>${esc(c.ip)}</strong></td>
+        <td><code>${esc(c.mac || "-")}</code></td>
+        <td>${esc(c.hostname || "unknown")}</td>
+        <td><span class="badge benign">${esc(c.source)}</span></td>
+      </tr>`
+    )
     .join("");
 }
 
@@ -435,13 +541,14 @@ let failures = 0;
 
 async function refresh() {
   try {
-    const [summary, timeseries, flows, alerts, blocks, analytics] = await Promise.all([
+    const [summary, timeseries, flows, alerts, blocks, analytics, clients] = await Promise.all([
       api("/api/summary"),
       api("/api/timeseries?points=120"),
       api("/api/flows?limit=60"),
       api("/api/alerts?limit=40"),
       api("/api/blocks"),
       api("/api/analytics?window=300"),
+      api("/api/clients"),
     ]);
     renderSummary(summary);
     renderTimeseries(timeseries);
@@ -449,6 +556,7 @@ async function refresh() {
     renderAlerts(alerts, blocks.blocks);
     renderBlocks(blocks);
     renderAnalytics(analytics);
+    renderClients(clients);
     document.getElementById("footer-refresh").textContent = `updated ${new Date().toLocaleTimeString()}`;
     failures = 0;
   } catch (error) {

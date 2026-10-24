@@ -135,7 +135,7 @@ class Flow:
 
     __slots__ = (
         "src_ip", "src_port", "dst_ip", "dst_port", "proto",
-        "start_ts", "last_ts", "end_active_ts",
+        "start_ts", "last_ts", "end_active_ts", "last_eval_ts",
         "init_fwd_win",
         "flow_len", "fwd_len", "bwd_len",
         "fwd_n", "bwd_n",
@@ -174,6 +174,7 @@ class Flow:
         self.start_ts = pkt.ts_us
         self.last_ts = pkt.ts_us
         self.end_active_ts = pkt.ts_us
+        self.last_eval_ts = pkt.ts_us
 
         self._check_flags(pkt)
         self._add_forward_first(pkt)
@@ -332,10 +333,14 @@ class FlowMeter:
         self,
         flow_timeout_us: int = FLOW_TIMEOUT_US,
         idle_timeout_us: Optional[int] = None,
+        active_timeout_us: Optional[int] = None,
+        min_packets: int = 2,
     ) -> None:
         self.flow_timeout_us = flow_timeout_us
         # live-capture extra: emit flows that stopped receiving packets
         self.idle_timeout_us = flow_timeout_us if idle_timeout_us is None else idle_timeout_us
+        self.active_timeout_us = active_timeout_us
+        self.min_packets = min_packets
         self._flows: dict[tuple, Flow] = {}
         self.started = 0
         self.discarded_single_packet = 0
@@ -354,7 +359,7 @@ class FlowMeter:
 
         # 120 s flow lifetime: finish the old flow, restart with this packet
         if pkt.ts_us - flow.start_ts > self.flow_timeout_us:
-            if flow.packet_count() > 1:
+            if flow.packet_count() >= self.min_packets:
                 emitted.append(flow)
             else:
                 self.discarded_single_packet += 1
@@ -384,6 +389,16 @@ class FlowMeter:
             flow.update_active_idle(pkt.ts_us)
             flow.add_packet(pkt, idle_prechecked=True)
         # else: flow already closed -> discard packet
+
+        # Periodic active-flow evaluation for real-time threat detection
+        if (
+            self.active_timeout_us
+            and (pkt.ts_us - flow.last_eval_ts >= self.active_timeout_us)
+            and flow.packet_count() >= self.min_packets
+        ):
+            flow.last_eval_ts = pkt.ts_us
+            emitted.append(flow)
+
         return emitted
 
     def flush(self, now_us: int) -> list[Flow]:
@@ -391,7 +406,7 @@ class FlowMeter:
         emitted: list[Flow] = []
         for key, flow in list(self._flows.items()):
             if now_us - flow.last_ts >= self.idle_timeout_us:
-                if flow.packet_count() > 1:
+                if flow.packet_count() >= self.min_packets:
                     emitted.append(flow)
                 else:
                     self.discarded_single_packet += 1
@@ -405,7 +420,7 @@ class FlowMeter:
         """Force-emit every remaining flow (end of an offline replay)."""
         emitted = []
         for flow in self._flows.values():
-            if flow.packet_count() > 1:
+            if flow.packet_count() >= self.min_packets:
                 emitted.append(flow)
             else:
                 self.discarded_single_packet += 1

@@ -25,6 +25,7 @@
         <a class="nav-item" href="#analytics"><span>⌁</span> Traffic analytics <b>›</b></a>
         <a class="nav-item" href="#flows"><span>≋</span> Flow explorer <b>›</b></a>
         <span class="nav-label">PROTECTION</span>
+        <a class="nav-item" href="#clients"><span>⊕</span> Connected devices <b>›</b></a>
         <a class="nav-item" href="#detections"><span>◉</span> Detections <b>›</b></a>
         <a class="nav-item" href="#blocks"><span>◌</span> Blocked addresses <b>›</b></a>
       </nav>
@@ -66,21 +67,34 @@
         </section>
 
         <section class="kpis">
-          <article class="kpi"><div class="kpi-top"><span class="kpi-icon indigo">≋</span><span class="trend positive">Live</span></div><h3>Total flows</h3><p id="kpi-flows">0</p><small id="kpi-flows-sub">–</small><svg class="sparkline indigo-line" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 26 C14 22 15 25 25 18 S42 23 52 15 S67 19 76 10 S95 14 119 3"/></svg></article>
-          <article class="kpi"><div class="kpi-top"><span class="kpi-icon rose">!</span><span class="trend danger">Attention</span></div><h3>Threats detected</h3><p id="kpi-attacks">0</p><small id="kpi-attacks-sub">–</small><svg class="sparkline rose-line" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 27 C15 26 18 21 30 24 S44 12 55 20 S72 5 82 16 S100 4 119 9"/></svg></article>
-          <article class="kpi"><div class="kpi-top"><span class="kpi-icon emerald">✓</span><span class="trend positive">Protected</span></div><h3>Blocked addresses</h3><p id="kpi-blocked">0</p><small id="kpi-blocked-sub">–</small><svg class="sparkline emerald-line" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 25 C18 24 22 19 34 22 S48 16 60 18 S78 8 89 14 S105 7 119 5"/></svg></article>
-          <article class="kpi"><div class="kpi-top"><span class="kpi-icon amber">↯</span><span class="trend neutral">Realtime</span></div><h3>Packets / second</h3><p id="kpi-pps">0</p><small id="kpi-pps-sub">–</small><svg class="sparkline amber-line" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 24 L16 23 L25 13 L38 19 L48 8 L62 17 L75 10 L88 15 L100 5 L119 11"/></svg></article>
-          <article class="kpi"><div class="kpi-top"><span class="kpi-icon blue">↗</span><span class="trend positive">Throughput</span></div><h3>Network throughput</h3><p id="kpi-bps">0 B/s</p><small id="kpi-bps-sub">–</small><svg class="sparkline blue-line" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M1 26 C17 25 20 17 34 20 S50 8 63 16 S77 12 89 14 S101 4 119 7"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon indigo">≋</span><span class="trend positive">Live</span></div><h3>Total flows</h3><p id="kpi-flows">0</p><small id="kpi-flows-sub">–</small><svg class="sparkline indigo-line" id="sparkline-flows" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M 1 31 L 119 31"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon rose">!</span><span class="trend danger">Attention</span></div><h3>Threats detected</h3><p id="kpi-attacks">0</p><small id="kpi-attacks-sub">–</small><svg class="sparkline rose-line" id="sparkline-attacks" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M 1 31 L 119 31"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon emerald">✓</span><span class="trend positive">Protected</span></div><h3>Blocked addresses</h3><p id="kpi-blocked">0</p><small id="kpi-blocked-sub">–</small><svg class="sparkline emerald-line" id="sparkline-blocked" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M 1 31 L 119 31"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon amber">↯</span><span class="trend neutral">Realtime</span></div><h3>Packets / second</h3><p id="kpi-pps">0</p><small id="kpi-pps-sub">–</small><svg class="sparkline amber-line" id="sparkline-pps" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M 1 31 L 119 31"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon blue">↗</span><span class="trend positive">Throughput</span></div><h3>Network throughput</h3><p id="kpi-bps">0 B/s</p><small id="kpi-bps-sub">–</small><svg class="sparkline blue-line" id="sparkline-bps" viewBox="0 0 120 32" preserveAspectRatio="none"><path d="M 1 31 L 119 31"/></svg></article>
+          <article class="kpi"><div class="kpi-top"><span class="kpi-icon indigo">⇌</span><span class="trend neutral">In-flight</span></div><h3>Active flows</h3><p id="kpi-active">0</p><small id="kpi-active-sub">–</small></article>
         </section>
 
         <section class="analytics-grid" id="analytics">
           <article class="panel chart-panel traffic-panel"><header><div><p class="eyebrow">TRAFFIC VOLUME</p><h2>Network activity</h2></div><span class="chart-note" id="chart-traffic-peak"></span></header><canvas id="chart-traffic" height="180"></canvas></article>
           <article class="panel chart-panel flows-panel"><header><div><p class="eyebrow">SECURITY EVENTS</p><h2>Flows &amp; attacks</h2></div><span class="chart-note" id="chart-flows-peak"></span></header><canvas id="chart-flows" height="180"></canvas></article>
-          <article class="panel status-panel"><header><div><p class="eyebrow">SYSTEM STATUS</p><h2>Protection health</h2></div><span class="status-check">● healthy</span></header><div class="health-ring"><div><strong>100%</strong><small>online</small></div></div><div class="health-legend"><span><i class="green"></i>Sensor running</span><b id="chip-model">model: –</b><span><i class="indigo-dot"></i>Firewall <b id="footer-fw">–</b></span></div></article>
+          <article class="panel status-panel"><header><div><p class="eyebrow">SYSTEM STATUS</p><h2>Protection health</h2></div><span class="status-check" id="health-status-check">● healthy</span></header><div class="health-ring"><div id="health-ring-val"><strong>100%</strong><small>online</small></div></div><div class="health-legend"><span><i class="green" id="health-sensor-dot"></i>Sensor running</span><b id="chip-model">model: –</b><span><i class="indigo-dot"></i>Firewall <b id="footer-fw">–</b></span></div></article>
         </section>
 
-        <section class="content-grid" id="detections">
-          <article class="panel table-panel"><header><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Latest detections</h2></div><span class="muted" id="alerts-count"></span></header><div class="table-wrap"><table id="table-alerts"><thead><tr><th>TIME</th><th>SOURCE</th><th>TARGET</th><th>SERVICE</th><th>SCORE</th><th>ACTION</th><th></th></tr></thead><tbody></tbody></table></div></article>
+        <section class="panel table-panel" id="clients">
+          <header>
+            <div><p class="eyebrow">HOTSPOT</p><h2>Connected devices <span class="muted" id="clients-count"></span></h2></div>
+            <span class="muted" id="clients-ap"></span>
+          </header>
+          <div class="table-wrap">
+            <table id="table-clients">
+              <thead><tr><th>IP ADDRESS</th><th>MAC ADDRESS</th><th>HOSTNAME</th><th>SOURCE</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="content-grid" id="detections">          <article class="panel table-panel"><header><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Latest detections</h2></div><span class="muted" id="alerts-count"></span></header><div class="table-wrap"><table id="table-alerts"><thead><tr><th>TIME</th><th>SOURCE</th><th>TARGET</th><th>SERVICE</th><th>SCORE</th><th>ACTION</th><th></th></tr></thead><tbody></tbody></table></div></article>
           <article class="panel table-panel" id="blocks"><header><div><p class="eyebrow">ACCESS CONTROL</p><h2>Blocked addresses</h2></div><span class="muted" id="blocks-count"></span></header><div class="table-wrap"><table id="table-blocks"><thead><tr><th>ADDRESS</th><th>SOURCE</th><th>EXPIRES</th><th></th></tr></thead><tbody></tbody></table></div></article>
         </section>
 

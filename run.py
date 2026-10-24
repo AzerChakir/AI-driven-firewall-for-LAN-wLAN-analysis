@@ -62,6 +62,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--serve", action="store_true", help="also start the dashboard when using --pcap"
     )
+    parser.add_argument(
+        "--realtime", action="store_true", help="pace pcap replay in real-time with current timestamps"
+    )
+    parser.add_argument(
+        "--speed", type=float, default=1.0, help="replay speed multiplier (default 1.0)"
+    )
+    parser.add_argument(
+        "--fast", action="store_true", help="replay pcap immediately without real-time pacing"
+    )
     parser.add_argument("--version", action="version", version=f"idsfw {__version__}")
     return parser.parse_args(argv)
 
@@ -100,6 +109,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode:
         cfg.set("firewall.mode", args.mode)
         cfg.set("firewall.mode_override", args.mode)
+
+    if args.pcap and args.serve and not args.fast:
+        cfg.set("capture.realtime_replay", True)
+    if args.realtime:
+        cfg.set("capture.realtime_replay", True)
+    if args.speed:
+        cfg.set("capture.replay_speed", args.speed)
 
     configure_logging(cfg, args.log_level)
 

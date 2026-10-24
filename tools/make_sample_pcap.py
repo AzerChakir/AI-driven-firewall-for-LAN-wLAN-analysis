@@ -120,10 +120,10 @@ def flood(ts: float, attacker: str, target: str, port: int, count: int) -> list:
     return packets
 
 
-def build(seed: int, rounds: int) -> list:
+def build(seed: int, rounds: int, base_ts: float | None = None) -> list:
     random.seed(seed)
     packets: list = []
-    moment = BASE_TS
+    moment = BASE_TS if base_ts is None else base_ts
 
     for _ in range(rounds):
         for client in random.sample(BENIGN_HOSTS, k=3):
@@ -143,13 +143,16 @@ def build(seed: int, rounds: int) -> list:
 
 
 def main() -> int:
+    import time
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", default="tests/data/sample.pcap")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--rounds", type=int, default=12, help="seconds of synthetic activity")
+    parser.add_argument("--now", action="store_true", help="use current epoch as base timestamp")
     args = parser.parse_args()
 
-    packets = build(args.seed, args.rounds)
+    base_ts = time.time() if args.now else BASE_TS
+    packets = build(args.seed, args.rounds, base_ts=base_ts)
     # wrap in Ethernet so the resulting pcap has a link type every tool knows
     frames = [Ether(src="aa:bb:cc:00:00:01", dst="aa:bb:cc:00:00:02") / pkt for pkt in packets]
     output = Path(args.output)
